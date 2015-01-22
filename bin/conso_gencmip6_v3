@@ -1,0 +1,107 @@
+#!/bin/bash
+#
+# cron pour garder trace de la compta et des volumes de fichiers crees
+# a executer chaque matin a 6h00
+# ======================================================================
+#. /etc/profile
+
+# Default values
+# ==============
+fg_dry=false
+fg_verbose=false
+
+# Get arguments from command line
+# ===============================
+while getopts :hdv Opt ; do
+  case $Opt in
+    h)
+      echo "usage: $0 [-d] [-v]"
+      echo ""
+      echo "options :"
+      echo "  -h : print this help and exit"
+      echo "  -d : dry run, no file produced"
+      echo "  -v : verbose"
+      exit 0 ;;
+    d)
+      fg_dry=true
+      ;;
+    v)
+      fg_verbose=true
+      ;;
+    :)
+      echo "$0: -"${OPTARG}" option: missing value"
+      exit 1
+      ;;
+    \?)
+      echo "$0: -"${OPTARG}" option: not supported"
+      exit 1
+      ;;
+  esac
+done
+shift $(($OPTIND-1))
+
+
+# Files and directories
+# =====================
+LOCAL_DIR="/ccc/cont003/home/dsm/p86ipsl/CCC_MYPROJECT/output"
+SAVE_DIR="/ccc/work/cont003/dsm/p86ipsl/CCC_MYPROJECT/output"
+
+if ( ${fg_dry} ) ; then
+  OUT_LOGIN="/dev/stdout"
+  OUT_TOTAL="/dev/stdout"
+  OUT_STORE="/dev/stdout"
+else
+  OUT_LOGIN="${LOCAL_DIR}/OUT_CONSO_LOGIN"
+  OUT_TOTAL="${LOCAL_DIR}/OUT_CONSO_ALL"
+  OUT_STORE="${LOCAL_DIR}/OUT_CONSO_STORE"
+fi
+
+Today=$( date +%F )
+
+
+# Produce files
+# =============
+
+# 1- Conso par login (HOME)
+# -------------------------
+# on garde la trace de chaque login, date en tete, en remplacant le fichier a chaque fois : OUT_CONSO_LOGIN
+ccc_myproject | \
+    sed -e'1,/gencmip6/d' | \
+    sed -e'/Total/,$d' | \
+    grep -v Login | \
+    grep -v '^$' | \
+    gawk -v Today=$Today '{printf "%10s %-10s %10.2f hours\n", Today, $1, $2}' \
+    > ${OUT_LOGIN}
+
+# 2- Conso total par jour
+# -----------------------
+# on garde le total, date en tete en accumulant dans le fichier : OUT_CONSO_ALL
+ccc_myproject | \
+    sed -e'1,/gencmip6/d' | \
+    grep -m 1 Total | \
+    gawk -v Today=$Today '{printf "%10s %-10s %10.2f hours\n", Today, "Total", $2}' \
+    >> ${OUT_TOTAL}
+
+# 3- volume cree sur STORE
+# ------------------------
+# par login qui a consomme, en remplacant le fichier a chaque fois : OUT_CONSO_STORE
+for i in $( ccc_myproject | \
+            sed -e'1,/gencmip6/d' | \
+            sed -e'/Total/,$d' | \
+            grep -v Login | \
+            grep -v '^$/' | \
+            grep -v 0.0 | \
+            gawk '{print $1}' )
+do
+  printf "%-10s %6s %s\n" $i $( du -sbh $(ccc_home -A -u $i)/IGCM_OUT/IPSLCM6 )
+done > ${OUT_STORE}
+
+
+# Save files (WORK)
+# =================
+if ( ! ${fg_dry} ) ; then
+  cp ${LOCAL_DIR}/OUT_CONSO_LOGIN ${SAVE_DIR}/OUT_CONSO_LOGIN_${Today}
+  cp ${LOCAL_DIR}/OUT_CONSO_ALL   ${SAVE_DIR}/OUT_CONSO_ALL_${Today}
+  cp ${LOCAL_DIR}/OUT_CONSO_STORE ${SAVE_DIR}/OUT_CONSO_STORE_${Today}
+fi
+

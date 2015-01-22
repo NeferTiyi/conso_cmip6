@@ -1,0 +1,31 @@
+#!/bin/bash
+#
+# Author: Marie-Alice Foujols
+#
+#---------------------------------------------
+while [ $# -ne 0 ]
+do
+        case $1 in
+       *)
+                break ;;
+        esac
+done
+
+#. /etc/profile
+
+# cron pour garder trace de la compta et des volumes de fichiers crees
+# a executer chaque matin a 6h00
+
+# 1- sauvegarde des fichiers au fur et a mesure dans WORK
+cp /ccc/cont003/home/dsm/p86ipsl/CCC_MYPROJECT/OUT_CONSO_LOGIN /ccc/work/cont003/dsm/p86ipsl/CCC_MYPROJECT/OUT_CONSO_LOGIN_$(date +%F)
+cp /ccc/cont003/home/dsm/p86ipsl/CCC_MYPROJECT/OUT_CONSO_ALL   /ccc/work/cont003/dsm/p86ipsl/CCC_MYPROJECT/OUT_CONSO_ALL$(date +%F)
+
+# 2- on garde la trace de chaque login, date en tete
+ccc_myproject|sed -e'1,/gencmip6/d' |sed -e'/Total/,$d'|grep -v Login|grep -v '^$/' | awk '{print system("echo -n $(date +%F)") " " $1 " " $2 }' >>  /ccc/cont003/home/dsm/p86ipsl/CCC_MYPROJECT/OUT_CONSO_LOGIN
+
+# 3- on garde le total, date en tete
+echo $(date +%F) $( ccc_myproject|sed -e'1,/gencmip6/d' |grep Total |head -1 | awk '{print $2}' ) >> /ccc/cont003/home/dsm/p86ipsl/CCC_MYPROJECT/OUT_CONSO_ALL
+
+# 4- volume cree
+# par login qui a consomme
+#

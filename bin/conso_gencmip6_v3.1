@@ -1,0 +1,163 @@
+#!/bin/bash
+#
+# cron pour garder trace de la compta et des volumes de fichiers crees
+# a executer chaque matin a 6h00
+# ======================================================================
+#. /etc/profile
+
+
+# Functions
+# =========
+function get_gencmip6 {
+  ccc_myproject | sed -e'1,/gencmip6/d' | grep -m 1 $1
+}
+
+function get_gencmip6_login {
+  ccc_myproject | sed -n -e'/gencmip6/,/^$/p' | head -n -1 | tail -n +3
+}
+
+
+# Default values
+# ==============
+fg_dry=false
+fg_verbose=false
+
+fg_all=true
+fg_login=true
+fg_bilan=true
+fg_store=true
+
+# Get arguments from command line
+# ===============================
+while getopts :hdaltsv Opt ; do
+  case $Opt in
+    h)
+      echo "usage: $0 [-h] [-a] [-l] [-b] [-s] [-d] [-v]"
+      echo ""
+      echo "options :"
+      echo "  -h : print this help and exit"
+      echo "  -d : dry run, no file produced"
+      echo "  -a : produce all files (default)"
+      echo "  -l : produce login file"
+      echo "  -b : produce bilan file"
+      echo "  -s : produce store file"
+      echo "  -v : verbose"
+      exit 0 ;;
+    d)
+      fg_dry=true
+      ;;
+    a)
+      fg_all=true
+      ;;
+    l)
+      fg_login=true
+      fg_all=false
+      fg_bilan=false
+      fg_store=false
+      ;;
+    t)
+      fg_bilan=true
+      fg_all=false
+      fg_login=false
+      fg_store=false
+      ;;
+    s)
+      fg_store=true
+      fg_all=false
+      fg_login=false
+      fg_bilan=false
+      ;;
+    v)
+      fg_verbose=true
+      ;;
+    :)
+      echo "$0: -"${OPTARG}" option: missing value"
+      exit 1
+      ;;
+    \?)
+      echo "$0: -"${OPTARG}" option: not supported"
+      exit 1
+      ;;
+  esac
+done
+shift $(($OPTIND-1))
+
+
+# Files and directories
+# =====================
+LOCAL_DIR="/ccc/cont003/home/dsm/p86ipsl/CCC_MYPROJECT/output"
+SAVE_DIR="/ccc/work/cont003/dsm/p86ipsl/CCC_MYPROJECT/"
+
+if ( ${fg_dry} ) ; then
+  OUT_LOGIN="/dev/stdout"
+  OUT_BILAN="/dev/stdout"
+  OUT_STORE="/dev/stdout"
+else
+  OUT_LOGIN="OUT_CONSO_LOGIN"
+  OUT_BILAN="OUT_CONSO_BILAN"
+  OUT_STORE="OUT_CONSO_STORE"
+fi
+
+#Today=$( date +%F )
+Today=$( ccc_myproject | grep gencmip6 | gawk '{print $NF}' )
+
+
+# Produce files
+# =============
+
+cd ${LOCAL_DIR}
+
+# 1- Conso par login (HOME)
+# -------------------------
+# on garde la trace de chaque login, date en tete, en remplacant le 
+# fichier a chaque fois : OUT_CONSO_LOGIN
+if ( ${fg_all} || ${fg_login} ) ; then
+  get_gencmip6_login | \
+      gawk -v Today=$Today '{printf "%10s %-10s %10.2f hours\n", Today, $1, $2}' \
+      > ${OUT_LOGIN}
+fi
+
+# 2- Conso total par jour
+# -----------------------
+# on garde le total, date en tete en accumulant dans le fichier : 
+# OUT_CONSO_BILAN
+if ( ${fg_all} || ${fg_bilan} ) ; then
+  printf "%10s " ${Today} >> ${OUT_BILAN}
+  get_gencmip6 Total | \
+      gawk '{printf "    %s %10.2f hours ", "total", $2}' \
+      >> ${OUT_BILAN}
+  get_gencmip6 Allocated | \
+      gawk '{printf "    %s %10.2f hours ", "alloc", $2}' \
+      >> ${OUT_BILAN}
+  get_gencmip6 Suggested | \
+      gawk '{printf "    %s %7s ", "use_theo", $NF}' \
+      >> ${OUT_BILAN}
+  get_gencmip6 Real | \
+      gawk '{printf "    %s %7s ", "use_real", $NF}' \
+      >> ${OUT_BILAN}
+  printf "\n" >> ${OUT_BILAN}
+fi
+
+# 3- volume cree sur STORE
+# ------------------------
+# par login qui a consomme, en remplacant le fichier a chaque fois : 
+# OUT_CONSO_STORE
+if ( ${fg_all} || ${fg_store} ) ; then
+  for login in $( get_gencmip6_login | \
+                  gawk '{if ($NF != 0.00) print $1}' ) ; do
+    printf "%10s %-10s %6s %s\n" \
+           ${Today} ${login} \
+           $( du -sbh $(ccc_home -A -u ${login})/IGCM_OUT/IPSLCM6 )
+  done > ${OUT_STORE}
+fi
+
+
+# Save files (WORK)
+# =================
+if ( ! ${fg_dry} ) ; then
+  Suffix=$( echo ${Today} | sed 's/-//g' )
+  cp ${OUT_LOGIN} ${SAVE_DIR}/${OUT_LOGIN}_${Suffix}
+  cp ${OUT_BILAN} ${SAVE_DIR}/${OUT_BILAN}_${Suffix}
+  cp ${OUT_STORE} ${SAVE_DIR}/${OUT_STORE}_${Suffix}
+fi
+
