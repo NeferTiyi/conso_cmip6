@@ -6,8 +6,11 @@ from __future__ import print_function, unicode_literals, division
 
 # standard library imports
 from argparse import ArgumentParser
+import os
+import os.path
+import glob
+# import ConfigParser as cp
 import datetime as dt
-
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -27,6 +30,56 @@ def date_to_string(dtdate):
   # return "-".join([dtdate.year, dtdate.month, dtdate.day])
   return "{:04d}-{:02d}-{:02d}".\
          format(dtdate.year, dtdate.month, dtdate.day)
+
+
+########################################
+def get_last_file(pattern):
+  """
+  """
+  current_dir = os.getcwd()
+  os.chdir(dir_data)
+  filename = file_pattern + pattern + "*"
+  return_value = glob.glob(os.path.join(dir_data, filename))[-1]
+  os.chdir(current_dir)
+  return return_value
+
+
+########################################
+def parse_param(filename):
+  """
+  """
+  param = Project()
+  with open(filename, "r") as filein:
+    for ligne in filein:
+      if ligne.split(":"):
+        clef, val = ligne.strip().split(":")
+        if clef == "project":
+          param.project = val.strip()
+        elif clef == "date_beg":
+          param.date_beg = val.strip()
+        elif clef == "date_end":
+          param.date_end = val.strip()
+        elif clef == "alloc":
+          param.alloc = float(val)
+  return param
+
+
+########################################
+def parse_bilan(filename):
+  """
+  """
+  conso_dict = ConsoDict()
+  with open(filename, "r") as filein:
+    for ligne in filein:
+      if ligne.split():
+        conso_dict.add_daily_conso(
+          ligne.split()[0],
+          ligne.split()[2],
+          ligne.split()[5],
+          ligne.split()[8],
+          ligne.split()[10]
+        )
+  return conso_dict
 
 
 ########################################
@@ -55,6 +108,17 @@ def get_theo_equation(xval, yval):
   b = np.array([np.nanmin(yval), np.nanmax(yval)])
 
   return np.linalg.solve(a, b)
+
+
+########################################
+class Project(dict):
+
+#---------------------------------------
+  def __init__(self):
+    self.project = ""
+    self.date_beg = ""
+    self.date_end = ""
+    self.alloc = 0
 
 
 ########################################
@@ -156,23 +220,21 @@ if __name__ == '__main__':
 
   args = parser.parse_args()
 
-  filename = "OUT_CONSO_BILAN_full"
-
-  conso_dict = ConsoDict()
-
-  with open(filename, "r") as filein:
-    for ligne in filein:
-      if ligne.split():
-        conso_dict.add_daily_conso(
-          ligne.split()[0],
-          ligne.split()[2],
-          ligne.split()[5],
-          ligne.split()[8],
-          ligne.split()[10]
-        )
-
   # ... Initialization ...
   # ----------------------
+  # Files and directories
+  dir_data = os.path.join("..", "output")
+  file_pattern = "OUT_CONSO_"
+
+  file_param = get_last_file("PARAM")
+  file_bilan = get_last_file("BILAN")
+
+  # Parse files
+  param = parse_param(file_param)
+  conso_dict = parse_bilan(file_bilan)
+
+  # ... Plot data ...
+  # -----------------
   # fig = plt.figure(figsize=(paper_size*scale))
 
   fig, ax_conso = plt.subplots()
@@ -246,7 +308,8 @@ if __name__ == '__main__':
   xmin, xmax = min(abscisses) - 1, nb_days + 1
   ax_conso.set_xlim(xmin, xmax)
   if args.max:
-    ymax = conso_dict.get_last_alloc()
+    # ymax = conso_dict.get_last_alloc()
+    ymax = param.alloc
   else:
     ymax = max(conso) + max(conso)*.1
   ax_conso.set_ylim(0., ymax)
@@ -261,12 +324,16 @@ if __name__ == '__main__':
   )
 
   # 3) Define axes title
-  ax_conso.set_ylabel("Cumul (heures)", fontweight="bold")
-  ax_theo.set_ylabel("Conso (%)", fontweight="bold")
+  ax_conso.set_ylabel("heures", fontweight="bold")
+  ax_theo.set_ylabel("%", fontweight="bold")
 
   # ... Main title and legend ...
   # -----------------------------
-  title = "Consommation gencmip6 (janvier-juin 2015)"
+  title = "Consommation {project}\n({beg}/{end})".format(
+    project=param.project.upper(),
+    beg=param.date_beg,
+    end=param.date_end
+  )
   ax_conso.set_title(title, fontweight="bold", size="large")
   ax_theo.legend(loc="best", fontsize="x-small", frameon=False)
   ax_conso.legend(loc="upper left", fontsize="x-small", frameon=False)
