@@ -23,14 +23,6 @@ def string_to_percent(x):
 
 
 ########################################
-def string_to_size_unit(x):
-  """
-  """
-  (size, unit) = (float(x[:-1]), x[-1])
-  return SizeUnit(size, unit)
-
-
-########################################
 def string_to_float(x):
   """
   """
@@ -107,52 +99,7 @@ class Project(object):
 
 
 ########################################
-class SizeUnit(object):
-  #---------------------------------------
-  def __init__(self, size, unit):
-    self.size = size
-    self.unit = unit
-
-  #---------------------------------------
-  def __repr__(self):
-    return "{:6.2f}{}o".format(self.size, self.unit)
-
-  #---------------------------------------
-  def convert_size(self, unit_out):
-    """
-    """
-    prefixes = ["K", "M", "G", "T", "P", "H"]
-
-    if not self.size or \
-       self.unit == unit_out:
-      size_out = self.size
-    else:
-      idx_deb = prefixes.index(self.unit)
-      idx_fin = prefixes.index(unit_out)
-      size_out = self.size
-      for i in xrange(abs(idx_fin-idx_deb)):
-        if idx_fin > idx_deb:
-          size_out = size_out / 1024
-        else:
-          size_out = size_out * 1024
-
-    return SizeUnit(size_out, unit_out)
-
-
-########################################
-class DirVolume(object):
-  #---------------------------------------
-  def __init__(self, dirname, size):
-    self.dirname = dirname
-    self.dirsize = size
-
-  #---------------------------------------
-  def __repr__(self):
-    return "{}={}".format(self.dirname, self.dirsize)
-
-
-########################################
-class StoreDict(dict):
+class LoginDict(dict):
   #---------------------------------------
   def __init__(self):
     self = {}
@@ -163,68 +110,66 @@ class StoreDict(dict):
       filein,
       skip_header=1,
       converters={0: string_to_date,
-                  1: str,
-                  2: string_to_size_unit,
-                  3: str},
+                  1: str},
       missing_values="nan",
     )
 
-    for date, login, dirsize, dirname in data:
-      self.add_item(date, login, dirsize, dirname)
+    for date, login, conso in data:
+      self.add_item(date, login, conso)
 
   #---------------------------------------
-  def add_item(self, date, login, dirsize, dirname):
+  def add_item(self, date, login, conso):
     """
     """
-    if login not in self:
-      self[login] = Login(date, login)
-    self[login].add_dirsize(dirsize, dirname)
+    self[login] = Login(date, login, conso)
+
+  # #---------------------------------------
+  # def get_items_in_full_range(self, inc=1):
+  #   """
+  #   """
+  #   items = (item for item in self.itervalues())
+  #   items = sorted(items, key=lambda item: item.date)
+
+  #   return items[::inc]
 
   #---------------------------------------
   def get_items(self):
     """
     """
     items = (item for item in self.itervalues())
-    items = sorted(items, reverse=True, key=lambda item: item.login)
+    items = sorted(items, key=lambda item: item.login)
 
     return items
 
-  # #---------------------------------------
-  # def get_items_by_name(self, pattern):
-  #   """
-  #   """
-  #   items = (item for item in self.itervalues() if item.dir)
-  #   items = sorted(items, key=lambda item: item.login)
+  #---------------------------------------
+  def get_items_not_null(self):
+    """
+    """
+    items = (item for item in self.itervalues()
+                   if item.conso > 0.)
+    items = sorted(items, key=lambda item: item.login)
 
-  #   return items
+    return items
 
 
 class Login(object):
   #---------------------------------------
-  def __init__(self, date, login):
+  def __init__(self, date, login, conso):
     self.date  = date
     self.login = login
-    self.total = SizeUnit(0., "K")
-    self.listdir = []
+    self.conso = conso
 
   #---------------------------------------
   def __repr__(self):
-    return "{}/{:%F}: {}".format(self.login, self.date, self.listdir)
+    return "{} ({:.2}h)".format(self.login, self.conso)
 
-  #---------------------------------------
-  def add_to_total(self, dirsize):
-    """
-    """
-    somme = self.total.convert_size("K").size + \
-            dirsize.convert_size("K").size
-    self.total = SizeUnit(somme, "K")
+  # #---------------------------------------
+  # def isfilled(self):
+  #   return self.filled
 
-  #---------------------------------------
-  def add_dirsize(self, dirsize, dirname):
-    """
-    """
-    self.listdir.append(DirVolume(dirname, dirsize))
-    self.add_to_total(dirsize)
+  # #---------------------------------------
+  # def fill(self):
+  #   self.filled = True
 
 
 ########################################
@@ -236,45 +181,38 @@ def plot_init():
 
 
 ########################################
-def plot_data(ax, coords, ylabels, values):
+def plot_data(ax, ycoord, ylabels, consos):
   """
   """
-  ax.barh(coords, values, align="center", color="linen",
-          linewidth=0.2, label="volume sur STORE ($To$)")
+  print(ycoord)
+  print(consos)
+
+  ax.barh(ycoord, consos, align="center", color="linen",
+          linewidth=0.2, label="conso (heures)")
 
 
 ########################################
-def plot_config(ax, coords, ylabels, dirnames, title, tot_volume):
+def plot_config(ax, ycoord, ylabels, title):
   """
   """
   # ... Config axes ...
   # -------------------
   # 1) Range
-  ymin, ymax = coords[0]-1, coords[-1]+1
+  ymin, ymax = ycoord[0]-1, ycoord[-1]+1
   ax.set_ylim(ymin, ymax)
 
   # 2) Ticks labels
   ax.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
-  ax.set_yticks(coords, minor=False)
+  ax.set_yticks(ycoord, minor=False)
   ax.set_yticklabels(ylabels, size="x-small", fontweight="bold")
 
-  xmin, xmax = ax.get_xlim()
-  xpos = xmin + (xmax-xmin)/50.
-  for (ypos, text) in zip(coords, dirnames):
-    ax.text(s=text, x=xpos, y=ypos, va="center", ha="left",
-                size="xx-small", color="gray", style="italic")
-
   # 3) Define axes title
-  ax.set_xlabel("$To$", fontweight="bold")
+  ax.set_xlabel("heures", fontweight="bold")
 
   # ... Main title and legend ...
   # -----------------------------
   ax.set_title(title, fontweight="bold", size="large")
   ax.legend(loc="best", fontsize="x-small", frameon=False)
-
-  tot_label = "volume total = {}".format(tot_volume)
-  plt.figtext(x=0.95, y=0.93, s=tot_label, backgroundcolor="linen",
-              ha="right", va="bottom", fontsize="small")
 
 
 ########################################
@@ -288,7 +226,7 @@ def plot_save(img_name):
 
     # pdf file's metadata
     d = pdf.infodict()
-    d["Title"]   = "Occupation GENCMIP6 sur STORE par login"
+    d["Title"]   = "Conso GENCMIP6 par login"
     d["Author"]  = "plot_bilan.py"
     # d["Subject"] = "Time spent over specific commands during create_ts \
     #                 jobs at IDRIS and four configurations at TGCC"
@@ -302,6 +240,9 @@ def get_arguments():
   parser = ArgumentParser()
   parser.add_argument("-v", "--verbose", action="store_true",
                       help="Verbose mode")
+  parser.add_argument("-f", "--full", action="store_true",
+                      help="plot all the logins" +
+                           " (default: plot only non-zero)")
 
   return parser.parse_args()
 
@@ -333,39 +274,31 @@ if __name__ == '__main__':
 
   # .. Fill in data dict ..
   # =======================
-  stores = StoreDict()
-  stores.fill_data(file_store)
+  # ... Initialization ...
+  # ----------------------
+  logins = LoginDict()
+  logins.fill_data(file_login)
 
   # .. Extract data depending on C.L. arguments ..
   # ==============================================
-  selected_items = stores.get_items()
+  if args.full:
+    selected_items = logins.get_items()
+  else:
+    selected_items = logins.get_items_not_null()
 
   if args.verbose:
-    for store in selected_items:
-      print(store.login, store.date)
-      for item in store.listdir:
-        print(
-          "{} {:>18s} {} ".format(
-            item.dirsize,
-            item.dirsize.convert_size("K"),
-            item.dirname,
-          )
-        )
+    for login in selected_items:
+      print(login)
 
   # .. Compute data to be plotted ..
   # ================================
-  ylabels = [store.login for store in selected_items
-                         for item in store.listdir]
-  values  = np.array([item.dirsize.convert_size("T").size
-                        for store in selected_items
-                        for item in store.listdir],
-                     dtype=float)
-  dirnames = [item.dirname for store in selected_items
-                           for item in store.listdir]
-  date = selected_items[0].date
+  nb_items = len(selected_items)
 
-  nb_items = len(ylabels)
-  coords  = np.linspace(1, nb_items, num=nb_items)
+  ycoord  = np.linspace(1, nb_items, num=nb_items)
+  ylabels = [item.login for item in selected_items]
+  consos  = np.array([item.conso for item in selected_items],
+                      dtype=float)
+  date = selected_items[0].date
 
   # .. Plot stuff ..
   # ================
@@ -375,21 +308,20 @@ if __name__ == '__main__':
 
   # ... Plot data ...
   # -----------------
-  plot_data(ax, coords, ylabels, values)
+  plot_data(ax, ycoord, ylabels, consos)
 
-  # ... Tweak figure ...
-  # --------------------
-  title = "Occupation {} de STORE par login\n{:%d/%m/%Y}".format(
+  # # ... Tweak figure ...
+  # # --------------------
+  title = "Consommation {} par login\n{:%d/%m/%Y}".format(
     gencmip6.project.upper(),
     date
   )
-  plot_config(ax, coords, ylabels, dirnames, title,
-              SizeUnit(np.sum(values), "T"))
+  plot_config(ax, ycoord, ylabels, title)
 
   # ... Save figure ...
   # -------------------
   dirout = "img"
-  img_name = "store.pdf"
+  img_name = "login.pdf"
   plot_save(os.path.join(dirout, img_name))
 
   plt.show()
