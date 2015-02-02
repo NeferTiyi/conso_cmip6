@@ -142,7 +142,9 @@ class SizeUnit(object):
 ########################################
 class DirVolume(object):
   #---------------------------------------
-  def __init__(self, dirname, size):
+  def __init__(self, date, login, dirname, size):
+    self.date  = date
+    self.login = login
     self.dirname = dirname
     self.dirsize = size
 
@@ -178,25 +180,29 @@ class StoreDict(dict):
     """
     if login not in self:
       self[login] = Login(date, login)
-    self[login].add_dirsize(dirsize, dirname)
+    self[login].add_directory(date, login, dirsize, dirname)
 
   #---------------------------------------
   def get_items(self):
     """
     """
-    items = (item for item in self.itervalues())
-    items = sorted(items, reverse=True, key=lambda item: item.login)
+    items = (subitem for item in self.itervalues()
+                     for subitem in item.listdir)
+    items = sorted(items, key=lambda item: item.login)
 
     return items
 
-  # #---------------------------------------
-  # def get_items_by_name(self, pattern):
-  #   """
-  #   """
-  #   items = (item for item in self.itervalues() if item.dir)
-  #   items = sorted(items, key=lambda item: item.login)
+  #---------------------------------------
+  def get_items_by_name(self, pattern):
+    """
+    """
+    # items = (item for item in self.itervalues() if item.dir)
+    items = (subitem for item in self.itervalues()
+                     for subitem in item.listdir
+                      if pattern in subitem.dirname)
+    items = sorted(items, key=lambda item: item.login)
 
-  #   return items
+    return items
 
 
 class Login(object):
@@ -220,10 +226,10 @@ class Login(object):
     self.total = SizeUnit(somme, "K")
 
   #---------------------------------------
-  def add_dirsize(self, dirsize, dirname):
+  def add_directory(self, date, login, dirsize, dirname):
     """
     """
-    self.listdir.append(DirVolume(dirname, dirsize))
+    self.listdir.append(DirVolume(date, login, dirname, dirsize))
     self.add_to_total(dirsize)
 
 
@@ -257,6 +263,7 @@ def plot_config(ax, coords, ylabels, dirnames, title, tot_volume):
   ax.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
   ax.set_yticks(coords, minor=False)
   ax.set_yticklabels(ylabels, size="x-small", fontweight="bold")
+  ax.invert_yaxis()
 
   xmin, xmax = ax.get_xlim()
   xpos = xmin + (xmax-xmin)/50.
@@ -302,6 +309,12 @@ def get_arguments():
   parser = ArgumentParser()
   parser.add_argument("-v", "--verbose", action="store_true",
                       help="Verbose mode")
+  parser.add_argument("-f", "--full", action="store_true",
+                      help="plot all the directories in IGCM_OUT" +
+                           "(default: plot IPSLCM6 directories)")
+  parser.add_argument("-p", "--pattern", action="store",
+                      default="IPSLCM6",
+                      help="plot the whole period")
 
   return parser.parse_args()
 
@@ -314,6 +327,8 @@ if __name__ == '__main__':
   # ... Command line arguments ...
   # ------------------------------
   args = get_arguments()
+  if args.verbose:
+    print(args)
 
   # ... Files and directories ...
   # -----------------------------
@@ -338,30 +353,30 @@ if __name__ == '__main__':
 
   # .. Extract data depending on C.L. arguments ..
   # ==============================================
-  selected_items = stores.get_items()
+  if args.full:
+    selected_items = stores.get_items()
+  else:
+    selected_items = stores.get_items_by_name(args.pattern)
 
   if args.verbose:
-    for store in selected_items:
-      print(store.login, store.date)
-      for item in store.listdir:
-        print(
-          "{} {:>18s} {} ".format(
-            item.dirsize,
-            item.dirsize.convert_size("K"),
-            item.dirname,
-          )
+    for item in selected_items:
+      print(
+        "{:8s} {:%F} {} {:>18s} {} ".format(
+          item.login,
+          item.date,
+          item.dirsize,
+          item.dirsize.convert_size("K"),
+          item.dirname,
         )
+      )
 
   # .. Compute data to be plotted ..
   # ================================
-  ylabels = [store.login for store in selected_items
-                         for item in store.listdir]
+  ylabels = [item.login for item in selected_items]
   values  = np.array([item.dirsize.convert_size("T").size
-                        for store in selected_items
-                        for item in store.listdir],
+                          for item in selected_items],
                      dtype=float)
-  dirnames = [item.dirname for store in selected_items
-                           for item in store.listdir]
+  dirnames = [item.dirname for item in selected_items]
   date = selected_items[0].date
 
   nb_items = len(ylabels)

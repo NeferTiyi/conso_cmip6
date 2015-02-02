@@ -205,6 +205,7 @@ def plot_config(ax, ycoord, ylabels, title):
   ax.ticklabel_format(axis="x", style="sci", scilimits=(0, 0))
   ax.set_yticks(ycoord, minor=False)
   ax.set_yticklabels(ylabels, size="x-small", fontweight="bold")
+  ax.invert_yaxis()
 
   # 3) Define axes title
   ax.set_xlabel("heures", fontweight="bold")
