@@ -14,26 +14,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-
-########################################
-def string_to_percent(x):
-  """
-  """
-  return float(x.strip("%"))/100.
+from gencmip6 import *
 
 
-########################################
-def string_to_float(x):
-  """
-  """
-  return float(x.strip("h"))
+# ########################################
+# def string_to_percent(x):
+#   """
+#   """
+#   return float(x.strip("%"))/100.
 
 
-########################################
-def string_to_date(ssaammjj, fmt="%Y-%m-%d"):
-  """
-  """
-  return dt.datetime.strptime(ssaammjj, fmt)
+# ########################################
+# def string_to_float(x):
+#   """
+#   """
+#   return float(x.strip("h"))
+
+
+# ########################################
+# def string_to_date(ssaammjj, fmt="%Y-%m-%d"):
+#   """
+#   """
+#   return dt.datetime.strptime(ssaammjj, fmt)
 
 
 # ########################################
@@ -43,59 +45,59 @@ def string_to_date(ssaammjj, fmt="%Y-%m-%d"):
 #   return dt.datetime.strftime(dtdate, fmt)
 
 
-########################################
-def get_last_file(dir_data, pattern):
-  """
-  """
-  current_dir = os.getcwd()
-  os.chdir(dir_data)
-  filename = pattern + "*"
-  return_value = sorted(glob.glob(os.path.join(dir_data, filename)))[-1]
-  os.chdir(current_dir)
-  return return_value
+# ########################################
+# def get_last_file(dir_data, pattern):
+#   """
+#   """
+#   current_dir = os.getcwd()
+#   os.chdir(dir_data)
+#   filename = pattern + "*"
+#   return_value = sorted(glob.glob(os.path.join(dir_data, filename)))[-1]
+#   os.chdir(current_dir)
+#   return return_value
 
 
-########################################
-class Project(object):
+# ########################################
+# class Project(object):
 
-  #---------------------------------------
-  def __init__(self):
-    self.project   = ""
-    self.date_init = ""
-    self.deadline  = ""
-    self.alloc     = 0
+#   #---------------------------------------
+#   def __init__(self):
+#     self.project   = ""
+#     self.date_init = ""
+#     self.deadline  = ""
+#     self.alloc     = 0
 
-  #---------------------------------------
-  def fill_data(self, filein):
-    import json
-    dico = json.load(open(filein, "r"))
-    self.project = dico["project"]
-    self.deadline = string_to_date(dico["deadline"]) + \
-                    dt.timedelta(days=-1)
-    self.alloc = dico["alloc"]
+#   #---------------------------------------
+#   def fill_data(self, filein):
+#     import json
+#     dico = json.load(open(filein, "r"))
+#     self.project = dico["project"]
+#     self.deadline = string_to_date(dico["deadline"]) + \
+#                     dt.timedelta(days=-1)
+#     self.alloc = dico["alloc"]
 
-  #---------------------------------------
-  def get_date_init(self, filein):
-    data = np.genfromtxt(
-      filein,
-      skip_header=1,
-      converters={0: string_to_date,
-                  1: string_to_percent},
-      missing_values="nan",
-    )
-    dates, utheos = zip(*data)
+#   #---------------------------------------
+#   def get_date_init(self, filein):
+#     data = np.genfromtxt(
+#       filein,
+#       skip_header=1,
+#       converters={0: string_to_date,
+#                   1: string_to_percent},
+#       missing_values="nan",
+#     )
+#     dates, utheos = zip(*data)
 
-    (x1, x2) = (np.nanargmin(utheos), np.nanargmax(utheos))
+#     (x1, x2) = (np.nanargmin(utheos), np.nanargmax(utheos))
 
-    m = np.array([[x1, 1.], [x2, 1.]])
-    n = np.array([utheos[x1], utheos[x2]])
+#     m = np.array([[x1, 1.], [x2, 1.]])
+#     n = np.array([utheos[x1], utheos[x2]])
 
-    (a, b) = np.linalg.solve(m, n)
+#     (a, b) = np.linalg.solve(m, n)
 
-    delta = int(round((-b/a)-x1 + 1))
+#     delta = int(round((-b/a)-x1 + 1))
 
-    d1 = dates[x1]
-    self.date_init = d1 + dt.timedelta(days=delta)
+#     d1 = dates[x1]
+#     self.date_init = d1 + dt.timedelta(days=delta)
 
 
 ########################################
